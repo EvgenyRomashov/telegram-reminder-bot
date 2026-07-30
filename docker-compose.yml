@@ -7,5 +7,5 @@ services:
     env_file:
       - .env
     volumes:
-      - ./reminders.db:/app/reminders.db # Persist the SQLite database
+      - ./data:/app/data # Persist the SQLite database and other data
     restart: always
