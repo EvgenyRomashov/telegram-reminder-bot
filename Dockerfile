@@ -11,5 +11,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the rest of the application code
 COPY . .
 
-# Run main.py when the container launches
-CMD ["python", "reminder_bot/main.py"]
+# Run main.py as a module when the container launches
+CMD ["python", "-m", "reminder_bot.main"]
