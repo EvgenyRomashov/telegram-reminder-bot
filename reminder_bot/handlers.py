@@ -18,7 +18,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     first_name = telegram_user.first_name
     username = telegram_user.username
 
-    async with get_db() as db:
+    with get_db() as db:
         user = db.query(User).filter(User.telegram_id == user_id).first()
 
         if user is None:

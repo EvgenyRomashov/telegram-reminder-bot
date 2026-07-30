@@ -5,6 +5,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Date, Time, Boole
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from sqlalchemy.engine.url import URL
 import os
+from contextlib import contextmanager
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///reminders.db")
 
@@ -37,6 +38,7 @@ class Contact(Base):
     user_id = Column(Integer, ForeignKey("users.telegram_id"))
     owner = relationship("User", back_populates="contacts")
 
+@contextmanager
 def get_db():
     """Database session provider."""
     db = SessionLocal()
