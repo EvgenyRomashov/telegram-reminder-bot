@@ -164,10 +164,19 @@ def register_handlers(application: Application):
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(conv_handler)
     application.add_handler(CommandHandler("test", test_notification))
+    application.add_handler(CommandHandler("list", list_contacts))
     # More handlers will be added here
 
 async def test_notification(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Generates and sends a test notification for the user."""
+    if not update.effective_user:
+        return
+    user_id = update.effective_user.id
+    message_text = generate_reminders_text(user_id)
+    await update.message.reply_text(message_text, parse_mode='HTML')
+
+async def list_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Displays a list of all contacts for the user."""
     if not update.effective_user:
         return
     user_id = update.effective_user.id
