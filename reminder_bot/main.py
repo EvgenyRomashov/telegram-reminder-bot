@@ -17,7 +17,7 @@ async def post_init(application: Application) -> None:
     This is called by the Application object after initialization but before polling starts.
     """
     scheduler = AsyncIOScheduler(timezone="UTC")
-    scheduler.add_job(send_daily_reminders, "cron", hour="*", args=[application.bot])
+    scheduler.add_job(send_daily_reminders, "cron", minute="*", args=[application.bot])
     scheduler.start()
 
 def main() -> None:
