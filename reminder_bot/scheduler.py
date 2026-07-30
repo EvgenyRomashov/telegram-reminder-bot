@@ -8,7 +8,7 @@ def start_scheduler(bot):
     scheduler = AsyncIOScheduler(timezone="UTC")
 
     # This job will run hourly to check for notifications to send
-    scheduler.add_job(send_daily_reminders, "cron", hour="*")
+    scheduler.add_job(send_daily_reminders, "cron", hour="*", args=[bot])
     
     scheduler.start()
 
