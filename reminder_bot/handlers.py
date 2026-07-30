@@ -173,7 +173,7 @@ async def test_notification(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
     user_id = update.effective_user.id
     message_text = generate_reminders_text(user_id)
-    await update.message.reply_text(message_text, parse_mode='HTML')
+    await context.bot.send_message(chat_id=update.effective_chat.id, text=message_text, parse_mode='HTML')
 
 async def list_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Displays a list of all contacts for the user."""
