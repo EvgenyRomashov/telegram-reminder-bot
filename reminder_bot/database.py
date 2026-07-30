@@ -6,6 +6,7 @@ from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 from sqlalchemy.engine.url import URL
 import os
 from contextlib import contextmanager
+from datetime import time
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///reminders.db")
 
@@ -21,7 +22,7 @@ class User(Base):
     username = Column(String, nullable=True)
     
     # User settings for notifications
-    notification_time = Column(Time, default="09:00:00")
+    notification_time = Column(Time, default=time(9, 0))
     timezone = Column(String, default="Europe/Moscow")
     notifications_enabled = Column(Boolean, default=True)
 
