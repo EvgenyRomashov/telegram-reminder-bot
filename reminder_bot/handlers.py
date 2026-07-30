@@ -10,7 +10,10 @@ from reminder_bot.database import get_db, User, Contact
 from reminder_bot.reminders import generate_reminders_text
 
 # Conversation states
-GET_NAME, GET_BIRTHDATE, GET_GROUP = range(3)
+(
+    GET_NAME, GET_BIRTHDATE, GET_GROUP,  # Add conversation
+    SELECT_CONTACT_TO_DELETE           # Delete conversation
+) = range(4)
 
 # Predefined contact groups
 CONTACT_GROUPS = ["Семья", "Друзья", "Коллеги", "Знакомые", "Важное"]
@@ -59,11 +62,11 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "<b>/delete</b> - Удалить день рождения из списка.\n"
         "<b>/settings</b> - Настроить время уведомлений.\n"
         "<b>/test</b> - Получить тестовое уведомление прямо сейчас.\n\n"
-        "Чтобы прервать добавление контакта, в любой момент отправь /cancel."
+        "Чтобы прервать любой диалог, в любой момент отправь /cancel."
     )
     await update.message.reply_html(help_text)
 
-
+# --- Add Contact Conversation ---
 async def add_contact_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     """Starts the conversation to add a new contact."""
     await update.message.reply_text(
@@ -137,36 +140,70 @@ async def get_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
     return ConversationHandler.END
 
+# --- Delete Contact Conversation ---
+async def delete_contact_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Starts the conversation to delete a contact."""
+    if not update.effective_user:
+        return ConversationHandler.END
 
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancels and ends the conversation."""
+    user_id = update.effective_user.id
+    with get_db() as db:
+        contacts = db.query(Contact).filter(Contact.user_id == user_id).all()
+
+    if not contacts:
+        await update.message.reply_text("У вас нет контактов для удаления.", reply_markup=ReplyKeyboardRemove())
+        return ConversationHandler.END
+
+    keyboard = [[contact.full_name] for contact in contacts]
     await update.message.reply_text(
-        "Добавление контакта отменено.", reply_markup=ReplyKeyboardRemove()
+        "Выберите контакт, который хотите удалить. Чтобы отменить, нажмите /cancel.",
+        reply_markup=ReplyKeyboardMarkup(
+            keyboard, one_time_keyboard=True, resize_keyboard=True,
+            input_field_placeholder="Выберите контакт для удаления"
+        ),
+    )
+    return SELECT_CONTACT_TO_DELETE
+
+
+async def delete_contact_selected(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Deletes the selected contact from the database."""
+    if not update.effective_user:
+        return ConversationHandler.END
+    
+    contact_name_to_delete = update.message.text
+    user_id = update.effective_user.id
+
+    with get_db() as db:
+        contact = db.query(Contact).filter(
+            Contact.user_id == user_id,
+            Contact.full_name == contact_name_to_delete
+        ).first()
+
+        if contact:
+            db.delete(contact)
+            db.commit()
+            await update.message.reply_text(
+                f"Контакт '{contact_name_to_delete}' был успешно удален.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+        else:
+            await update.message.reply_text(
+                "Не удалось найти такой контакт. Попробуйте снова, вызвав /delete.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+
+    return ConversationHandler.END
+
+# --- General Conversation Fallback ---
+async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Cancels and ends any conversation."""
+    await update.message.reply_text(
+        "Действие отменено.", reply_markup=ReplyKeyboardRemove()
     )
     context.user_data.clear()
     return ConversationHandler.END
 
-
-def register_handlers(application: Application):
-    """Registers all the handlers for the bot."""
-
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("add", add_contact_start)],
-        states={
-            GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
-            GET_BIRTHDATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_birthdate)],
-            GET_GROUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_group)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-    )
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(conv_handler)
-    application.add_handler(CommandHandler("test", test_notification))
-    application.add_handler(CommandHandler("list", list_contacts))
-    # More handlers will be added here
-
+# --- Standalone Commands ---
 async def test_notification(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Generates and sends a test notification for the user."""
     if not update.effective_user:
@@ -182,3 +219,34 @@ async def list_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     user_id = update.effective_user.id
     message_text = generate_reminders_text(user_id)
     await update.message.reply_text(message_text, parse_mode='HTML')
+
+
+# --- Handler Registration ---
+def register_handlers(application: Application):
+    """Registers all the handlers for the bot."""
+
+    add_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("add", add_contact_start)],
+        states={
+            GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
+            GET_BIRTHDATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_birthdate)],
+            GET_GROUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_group)],
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+        map_to_parent={ConversationHandler.END: ConversationHandler.END}
+    )
+
+    delete_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("delete", delete_contact_start)],
+        states={
+            SELECT_CONTACT_TO_DELETE: [MessageHandler(filters.TEXT & ~filters.COMMAND, delete_contact_selected)]
+        },
+        fallbacks=[CommandHandler("cancel", cancel)],
+    )
+
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("test", test_notification))
+    application.add_handler(CommandHandler("list", list_contacts))
+    application.add_handler(add_conv_handler)
+    application.add_handler(delete_conv_handler)
