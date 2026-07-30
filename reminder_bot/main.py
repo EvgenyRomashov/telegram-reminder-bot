@@ -6,9 +6,19 @@ from telegram.ext import Application
 from dotenv import load_dotenv
 import os
 
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from reminder_bot.scheduler import send_daily_reminders
 from reminder_bot.handlers import register_handlers
-from reminder_bot.scheduler import start_scheduler
 from reminder_bot.database import engine, Base
+
+async def post_init(application: Application) -> None:
+    """
+    Post-initialization function to set up the scheduler.
+    This is called by the Application object after initialization but before polling starts.
+    """
+    scheduler = AsyncIOScheduler(timezone="UTC")
+    scheduler.add_job(send_daily_reminders, "cron", hour="*", args=[application.bot])
+    scheduler.start()
 
 def main() -> None:
     """Start the telegram bot."""
@@ -30,14 +40,11 @@ def main() -> None:
     # Create the database tables
     Base.metadata.create_all(bind=engine)
 
-    # Create the Application and pass it your bot's token.
-    application = Application.builder().token(token).build()
+    # Create the Application and pass it your bot's token, with post_init hook.
+    application = Application.builder().token(token).post_init(post_init).build()
 
     # Register all handlers
     register_handlers(application)
-
-    # Start the scheduler
-    start_scheduler(application.bot)
 
     logger.info("Bot started and listening for messages...")
 
