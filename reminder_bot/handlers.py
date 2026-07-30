@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from datetime import datetime
 
 from reminder_bot.database import get_db, User, Contact
+from reminder_bot.reminders import generate_reminders_text
 
 # Conversation states
 GET_NAME, GET_BIRTHDATE, GET_GROUP = range(3)
@@ -56,7 +57,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "<b>/add</b> - Добавить новый день рождения.\n"
         "<b>/list</b> - Показать все добавленные дни рождения.\n"
         "<b>/delete</b> - Удалить день рождения из списка.\n"
-        "<b>/settings</b> - Настроить время уведомлений.\n\n"
+        "<b>/settings</b> - Настроить время уведомлений.\n"
+        "<b>/test</b> - Получить тестовое уведомление прямо сейчас.\n\n"
         "Чтобы прервать добавление контакта, в любой момент отправь /cancel."
     )
     await update.message.reply_html(help_text)
@@ -128,7 +130,8 @@ async def get_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         db.commit()
 
     await update.message.reply_text(
-        f"Отлично! Контакт {context.user_data['full_name']} успешно добавлен в группу '{group}'.",
+        f"Отлично! Контакт {context.user_data['full_name']} успешно добавлен.\n\n"
+        "Чтобы добавить еще один, снова отправь /add.",
         reply_markup=ReplyKeyboardRemove(),
     )
     context.user_data.clear()
@@ -160,4 +163,13 @@ def register_handlers(application: Application):
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(conv_handler)
+    application.add_handler(CommandHandler("test", test_notification))
     # More handlers will be added here
+
+async def test_notification(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Generates and sends a test notification for the user."""
+    if not update.effective_user:
+        return
+    user_id = update.effective_user.id
+    message_text = generate_reminders_text(user_id)
+    await update.message.reply_text(message_text, parse_mode='HTML')
