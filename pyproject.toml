@@ -19,4 +19,6 @@ dependencies = [
 dev = [
     "pytest",
     "pytest-asyncio",
+    "pytest-mock",
+    "freezegun",
 ]
