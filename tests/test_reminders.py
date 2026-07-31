@@ -24,16 +24,24 @@ def db_session():
 
 # --- Tests for format_plural ---
 
-plural_test_cases = [
+plural_year_test_cases = [
     (1, "год"), (2, "года"), (3, "года"), (4, "года"), (5, "лет"),
-    (21, "год"), (22, "года"), (25, "лет"),
+    (10, "лет"), (11, "лет"), (12, "лет"), (13, "лет"), (14, "лет"),
+    (20, "лет"), (21, "год"), (22, "года"), (25, "лет"), (31, "год")
 ]
 
-@pytest.mark.parametrize("value, expected", plural_test_cases)
+@pytest.mark.parametrize("value, expected", plural_year_test_cases)
 def test_format_plural_years(value, expected):
     """Tests the plural formatting for 'год'."""
     forms = ('год', 'года', 'лет')
     assert format_plural(value, forms) == expected
+
+def test_format_plural_other_forms():
+    """Tests other word forms."""
+    day_forms = ('день', 'дня', 'дней')
+    assert format_plural(1, day_forms) == 'день'
+    assert format_plural(2, day_forms) == 'дня'
+    assert format_plural(5, day_forms) == 'дней'
 
 # --- Tests for generate_reminders_text ---
 
@@ -48,16 +56,9 @@ def test_generate_reminders_text_with_contacts(db_session, mocker):
     # Setup test data
     test_user = User(telegram_id=123, first_name="Тест")
     
-    # Contact 1: Birthday is today
     contact1 = Contact(user_id=123, full_name="Именинник Сегодня", birth_date=date(1990, 10, 25))
-    
-    # Contact 2: Birthday is tomorrow
     contact2 = Contact(user_id=123, full_name="Именинник Завтра", birth_date=date(2000, 10, 26))
-
-    # Contact 3: Birthday in 10 days
     contact3 = Contact(user_id=123, full_name="Далекий Именинник", birth_date=date(1985, 11, 4))
-    
-    # Contact 4: Birthday already passed this year
     contact4 = Contact(user_id=123, full_name="Прошедший Именинник", birth_date=date(1995, 1, 15))
 
     db_session.add_all([test_user, contact1, contact2, contact3, contact4])
@@ -68,10 +69,7 @@ def test_generate_reminders_text_with_contacts(db_session, mocker):
     
     # Assertions
     assert "🎉 Напоминания о днях рождения:" in result_text
-    # Check that contacts are ordered by days_until
     assert result_text.find("Сегодня") < result_text.find("Завтра") < result_text.find("Далекий") < result_text.find("Прошедший")
-
-    # Check content for each contact
     assert "| Именинник Сегодня | день рождения сегодня! | 36 лет | 25 октября 1990 года |" in result_text
     assert "| Именинник Завтра | день рождения завтра! | 26 лет | 26 октября 2000 года |" in result_text
     assert "| Далекий Именинник | день рождения через 10 дней | 41 год | 4 ноября 1985 года |" in result_text
@@ -89,4 +87,3 @@ def test_generate_reminders_text_no_contacts(db_session, mocker):
     result_text = generate_reminders_text(user_id=456)
 
     assert result_text == "У вас пока нет добавленных контактов. Используйте /add, чтобы добавить первый."
-
