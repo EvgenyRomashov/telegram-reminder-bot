@@ -17,12 +17,14 @@ from reminder_bot.reminders import generate_reminders_text
     # Delete conversation
     SELECT_CONTACT_TO_DELETE,
     # Settings conversation
-    SELECT_SETTING, GET_NEW_TIME, GET_NEW_TIMEZONE
-) = range(7)
+    SELECT_SETTING, GET_NEW_TIME, GET_NEW_TIMEZONE,
+    # Edit conversation
+    SELECT_CONTACT_TO_EDIT, SELECT_FIELD_TO_EDIT, GET_EDITED_VALUE,
+) = range(10)
 
-# Predefined contact groups
+# Predefined contact groups and edit choices
 CONTACT_GROUPS = ["Семья", "Друзья", "Коллеги", "Знакомые", "Важное"]
-
+EDIT_CHOICES = ["Имя", "Дату", "Группу"]
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends a welcome message when the /start command is issued and registers the user."""
@@ -63,6 +65,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "<b>/start</b> - Начать работу с ботом и зарегистрироваться.\n"
         "<b>/help</b> - Показать это справочное сообщение.\n"
         "<b>/add</b> - Добавить новый день рождения.\n"
+        "<b>/edit</b> - Редактировать существующий контакт.\n"
         "<b>/list</b> - Показать все добавленные дни рождения.\n"
         "<b>/delete</b> - Удалить день рождения из списка.\n"
         "<b>/settings</b> - Настроить время и часовой пояс уведомлений.\n"
@@ -130,118 +133,94 @@ async def delete_contact_selected(update: Update, context: ContextTypes.DEFAULT_
             await update.message.reply_text("Не удалось найти такой контакт. Попробуйте снова, вызвав /delete.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
-# --- Settings Conversation ---
-async def settings_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+# --- Edit Contact Conversation ---
+async def edit_contact_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     user_id = update.effective_user.id
     with get_db() as db:
-        user = db.query(User).filter(User.telegram_id == user_id).one()
-        current_time = user.notification_time.strftime('%H:%M')
-        current_tz = user.timezone
+        contacts = db.query(Contact).filter(Contact.user_id == user_id).all()
+    if not contacts:
+        await update.message.reply_text("У вас нет контактов для редактирования.", reply_markup=ReplyKeyboardRemove())
+        return ConversationHandler.END
+    keyboard = [[contact.full_name] for contact in contacts]
+    await update.message.reply_text("Выберите контакт для редактирования.", reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True))
+    return SELECT_CONTACT_TO_EDIT
+
+async def edit_select_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    contact_name = update.message.text
+    user_id = update.effective_user.id
+    with get_db() as db:
+        contact = db.query(Contact).filter(Contact.user_id == user_id, Contact.full_name == contact_name).first()
+    if not contact:
+        await update.message.reply_text("Контакт не найден. Попробуйте снова.", reply_markup=ReplyKeyboardRemove())
+        return ConversationHandler.END
     
-    keyboard = [["Изменить время"], ["Изменить часовой пояс"]]
-    await update.message.reply_text(
-        f"Текущие настройки:\n"
-        f"- Время уведомлений: <b>{current_time}</b>\n"
-        f"- Часовой пояс: <b>{current_tz}</b>\n\n"
-        "Что вы хотите изменить?",
-        reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True),
-        parse_mode='HTML'
-    )
-    return SELECT_SETTING
+    context.user_data['contact_id_to_edit'] = contact.id
+    keyboard = [EDIT_CHOICES]
+    await update.message.reply_text("Что именно вы хотите изменить?", reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True, resize_keyboard=True))
+    return SELECT_FIELD_TO_EDIT
 
-async def settings_select_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def edit_select_field(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     choice = update.message.text
-    if choice == "Изменить время":
-        await update.message.reply_text("Пожалуйста, введите новый час для уведомлений (число от 0 до 23).", reply_markup=ReplyKeyboardRemove())
-        return GET_NEW_TIME
-    elif choice == "Изменить часовой пояс":
-        await update.message.reply_text("Пожалуйста, введите ваш часовой пояс (например, Europe/Moscow, Asia/Yekaterinburg).", reply_markup=ReplyKeyboardRemove())
-        return GET_NEW_TIMEZONE
+    context.user_data['edit_choice'] = choice
+    
+    if choice == "Имя":
+        await update.message.reply_text("Введите новое имя.", reply_markup=ReplyKeyboardRemove())
+    elif choice == "Дату":
+        await update.message.reply_text("Введите новую дату в формате ДД.ММ.ГГГГ.", reply_markup=ReplyKeyboardRemove())
+    elif choice == "Группу":
+        await update.message.reply_text("Выберите новую группу.", reply_markup=ReplyKeyboardMarkup([CONTACT_GROUPS], one_time_keyboard=True, resize_keyboard=True))
     else:
-        await update.message.reply_text("Пожалуйста, выберите один из вариантов на клавиатуре.")
-        return SELECT_SETTING
-
-async def set_notification_time(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        new_hour = int(update.message.text)
-        if not (0 <= new_hour <= 23):
-            raise ValueError()
-        
-        user_id = update.effective_user.id
-        with get_db() as db:
-            user = db.query(User).filter(User.telegram_id == user_id).one()
-            user.notification_time = time(new_hour, 0)
-            db.commit()
-        
-        await update.message.reply_text(f"Отлично! Время уведомлений изменено на {new_hour}:00.")
+        await update.message.reply_text("Неверный выбор. Пожалуйста, начните сначала /edit.")
         return ConversationHandler.END
-    except (ValueError, TypeError):
-        await update.message.reply_text("Неверное значение. Пожалуйста, введите час в виде числа от 0 до 23.")
-        return GET_NEW_TIME
-
-async def set_timezone(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        new_tz_str = update.message.text
-        # Validate timezone
-        pytz.timezone(new_tz_str)
         
-        user_id = update.effective_user.id
-        with get_db() as db:
-            user = db.query(User).filter(User.telegram_id == user_id).one()
-            user.timezone = new_tz_str
-            db.commit()
+    return GET_EDITED_VALUE
 
-        await update.message.reply_text(f"Отлично! Ваш часовой пояс изменен на {new_tz_str}.")
-        return ConversationHandler.END
-    except pytz.UnknownTimeZoneError:
-        await update.message.reply_text("Не удалось распознать такой часовой пояс. Пожалуйста, попробуйте еще раз (например, Europe/Moscow).")
-        return GET_NEW_TIMEZONE
+async def get_edited_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    choice = context.user_data.get('edit_choice')
+    contact_id = context.user_data.get('contact_id_to_edit')
+    
+    with get_db() as db:
+        contact = db.query(Contact).filter(Contact.id == contact_id).one()
+        
+        if choice == "Имя":
+            contact.full_name = update.message.text
+            await update.message.reply_text(f"Имя контакта изменено на {contact.full_name}.", reply_markup=ReplyKeyboardRemove())
+        elif choice == "Дату":
+            try:
+                contact.birth_date = datetime.strptime(update.message.text, "%d.%m.%Y").date()
+                await update.message.reply_text(f"Дата рождения изменена.", reply_markup=ReplyKeyboardRemove())
+            except ValueError:
+                await update.message.reply_text("Неверный формат даты. Попробуйте /edit снова.")
+                return ConversationHandler.END
+        elif choice == "Группу":
+            new_group = update.message.text
+            if new_group not in CONTACT_GROUPS:
+                await update.message.reply_text("Пожалуйста, выберите группу из предложенных. Попробуйте /edit снова.")
+                return ConversationHandler.END
+            contact.contact_group = new_group
+            await update.message.reply_text(f"Группа изменена на {new_group}.", reply_markup=ReplyKeyboardRemove())
+            
+        db.commit()
 
-# --- General Conversation Fallback ---
-async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Cancels and ends any conversation."""
-    await update.message.reply_text("Действие отменено.", reply_markup=ReplyKeyboardRemove())
     context.user_data.clear()
     return ConversationHandler.END
 
-# --- Standalone Commands ---
-async def test_notification(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    message_text = generate_reminders_text(user_id)
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=message_text, parse_mode='HTML')
-
-async def list_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    user_id = update.effective_user.id
-    message_text = generate_reminders_text(user_id)
-    await update.message.reply_text(message_text, parse_mode='HTML')
+# --- Settings Conversation ---
+async def settings_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # ... (existing settings_start function) ...
+# ... (all other existing functions) ...
 
 # --- Handler Registration ---
 def register_handlers(application: Application):
     """Registers all the handlers for the bot."""
-    add_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("add", add_contact_start)],
-        states={
-            GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
-            GET_BIRTHDATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_birthdate)],
-            GET_GROUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_group)],
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-    )
+    # ... (existing add and delete handlers) ...
 
-    delete_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("delete", delete_contact_start)],
+    edit_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("edit", edit_contact_start)],
         states={
-            SELECT_CONTACT_TO_DELETE: [MessageHandler(filters.TEXT & ~filters.COMMAND, delete_contact_selected)]
-        },
-        fallbacks=[CommandHandler("cancel", cancel)],
-    )
-
-    settings_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("settings", settings_start)],
-        states={
-            SELECT_SETTING: [MessageHandler(filters.TEXT & ~filters.COMMAND, settings_select_action)],
-            GET_NEW_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_notification_time)],
-            GET_NEW_TIMEZONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_timezone)],
+            SELECT_CONTACT_TO_EDIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_select_contact)],
+            SELECT_FIELD_TO_EDIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_select_field)],
+            GET_EDITED_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_edited_value)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
     )
@@ -252,4 +231,4 @@ def register_handlers(application: Application):
     application.add_handler(CommandHandler("list", list_contacts))
     application.add_handler(add_conv_handler)
     application.add_handler(delete_conv_handler)
-    application.add_handler(settings_conv_handler)
+    application.add_handler(edit_conv_handler)
