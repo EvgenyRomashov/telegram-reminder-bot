@@ -250,13 +250,16 @@ def register_handlers(application: Application):
             GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
             GET_BIRTHDATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_birthdate)],
             GET_GROUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_group)],
-        }, fallbacks=[CommandHandler("cancel", cancel)]
+        }, 
+        fallbacks=[CommandHandler("cancel", cancel)],
+        allow_reentry=True
     )
     
     delete_conv = ConversationHandler(
         entry_points=[CommandHandler("delete", delete_contact_start), MessageHandler(filters.Regex(f"^{DELETE_BTN}$"), delete_contact_start)],
         states={SELECT_CONTACT_TO_DELETE: [MessageHandler(filters.TEXT & ~filters.COMMAND, delete_contact_selected)]},
-        fallbacks=[CommandHandler("cancel", cancel)]
+        fallbacks=[CommandHandler("cancel", cancel)],
+        allow_reentry=True
     )
 
     edit_conv = ConversationHandler(
@@ -265,7 +268,9 @@ def register_handlers(application: Application):
             SELECT_CONTACT_TO_EDIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_select_contact)],
             SELECT_FIELD_TO_EDIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_select_field)],
             GET_EDITED_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_edited_value)],
-        }, fallbacks=[CommandHandler("cancel", cancel)]
+        }, 
+        fallbacks=[CommandHandler("cancel", cancel)],
+        allow_reentry=True
     )
 
     settings_conv = ConversationHandler(
@@ -274,7 +279,9 @@ def register_handlers(application: Application):
             SELECT_SETTING: [MessageHandler(filters.TEXT & ~filters.COMMAND, settings_select_action)],
             GET_NEW_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_notification_time)],
             GET_NEW_TIMEZONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_timezone)],
-        }, fallbacks=[CommandHandler("cancel", cancel)]
+        }, 
+        fallbacks=[CommandHandler("cancel", cancel)],
+        allow_reentry=True
     )
 
     application.add_handler(CommandHandler("start", start))
