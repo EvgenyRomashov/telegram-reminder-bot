@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Дни рождения</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <main class="container">
+    <header>
+      <div><p class="eyebrow">Напоминания</p><h1>Дни рождения</h1></div>
+      <button id="add-button" class="primary" type="button">＋ Добавить</button>
+    </header>
+    <p id="status" class="status">Подключение к Telegram…</p>
+    <section id="contacts" class="contacts" aria-live="polite"></section>
+  </main>
+  <dialog id="contact-dialog">
+    <form id="contact-form" method="dialog">
+      <div class="dialog-title"><h2 id="form-title">Новый контакт</h2><button type="button" class="icon" id="close-button">×</button></div>
+      <input id="contact-id" type="hidden">
+      <label>Имя<input id="full-name" maxlength="200" required autocomplete="name"></label>
+      <label>Дата рождения<input id="birth-date" type="date" required></label>
+      <label>Группа<select id="contact-group"><option>Семья</option><option selected>Друзья</option><option>Коллеги</option><option>Знакомые</option><option>Важное</option></select></label>
+      <p id="form-error" class="error" role="alert"></p>
+      <div class="actions"><button type="button" class="secondary" id="cancel-button">Отмена</button><button class="primary" type="submit">Сохранить</button></div>
+    </form>
+  </dialog>
+  <script src="/static/app.js"></script>
+</body>
+</html>

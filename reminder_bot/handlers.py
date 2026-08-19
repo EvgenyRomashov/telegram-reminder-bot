@@ -1,10 +1,10 @@
 """
 Bot command and message handlers with a keyboard UI.
 """
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, ContextTypes
-from sqlalchemy.exc import IntegrityError
 from datetime import datetime, time
+import os
 import pytz
 
 from reminder_bot.database import get_db, User, Contact
@@ -27,10 +27,15 @@ SETTINGS_BTN = "⚙️ Настройки"
 HELP_BTN = "❓ Помощь"
 CANCEL_BTN = "↩️ Отмена"
 
+WEB_APP_URL = os.getenv("WEB_APP_URL", "").strip()
+WEB_APP_BTN = "🌐 Открыть приложение"
+
 MAIN_KEYBOARD = [
     [ADD_BTN, EDIT_BTN, DELETE_BTN],
-    [LIST_BTN, SETTINGS_BTN, HELP_BTN]
+    [LIST_BTN, SETTINGS_BTN, HELP_BTN],
 ]
+if WEB_APP_URL.startswith("https://"):
+    MAIN_KEYBOARD.append([KeyboardButton(WEB_APP_BTN, web_app=WebAppInfo(WEB_APP_URL))])
 
 CONTACT_GROUPS = ["Семья", "Друзья", "Коллеги", "Знакомые", "Важное"]
 EDIT_CHOICES = ["Имя", "Дату", "Группу"]
@@ -258,6 +263,16 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
     return ConversationHandler.END
 
+async def open_web_app(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not WEB_APP_URL.startswith("https://"):
+        await update.message.reply_text("Web-приложение пока не настроено.")
+        return
+    keyboard = [[KeyboardButton(WEB_APP_BTN, web_app=WebAppInfo(WEB_APP_URL))]]
+    await update.message.reply_text(
+        "Откройте приложение для управления контактами.",
+        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
+    )
+
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Restore the main keyboard after an interrupted or restarted conversation."""
     await update.message.reply_text(
@@ -326,6 +341,7 @@ def register_handlers(application: Application):
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("test", test_notification))
     application.add_handler(CommandHandler("menu", show_main_menu))
+    application.add_handler(CommandHandler("app", open_web_app))
     
     # Simple commands can also be triggered by buttons
     application.add_handler(MessageHandler(filters.Regex(f"^{LIST_BTN}$"), list_contacts))
