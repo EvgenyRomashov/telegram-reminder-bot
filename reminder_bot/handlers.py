@@ -110,7 +110,7 @@ async def get_birthdate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return GET_BIRTHDATE
 
 async def get_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['group'] = update.message.text if update.message.text in CONTACT_GROUPS else "Друзья"
+    context.user_data['contact_group'] = update.message.text if update.message.text in CONTACT_GROUPS else "Друзья"
     with get_db() as db:
         db.add(Contact(**context.user_data, user_id=update.effective_user.id))
         db.commit()
