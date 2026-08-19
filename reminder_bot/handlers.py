@@ -25,6 +25,7 @@ DELETE_BTN = "🗑️ Удалить"
 LIST_BTN = "📋 Список"
 SETTINGS_BTN = "⚙️ Настройки"
 HELP_BTN = "❓ Помощь"
+CANCEL_BTN = "↩️ Отмена"
 
 MAIN_KEYBOARD = [
     [ADD_BTN, EDIT_BTN, DELETE_BTN],
@@ -33,6 +34,8 @@ MAIN_KEYBOARD = [
 
 CONTACT_GROUPS = ["Семья", "Друзья", "Коллеги", "Знакомые", "Важное"]
 EDIT_CHOICES = ["Имя", "Дату", "Группу"]
+CANCEL_KEYBOARD = ReplyKeyboardMarkup([[CANCEL_BTN]], resize_keyboard=True)
+CANCEL_FILTER = filters.Regex(f"^{CANCEL_BTN}$")
 
 def contact_label(contact: Contact) -> str:
     return f"{contact.full_name} · #{contact.id}"
@@ -89,7 +92,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 # --- Add Contact Conversation ---
 async def add_contact_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     ensure_user(update.effective_user)
-    await update.message.reply_text("Введите фамилию и имя. Для отмены введите /cancel.", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text("Введите фамилию и имя. Для отмены введите /cancel.", reply_markup=CANCEL_KEYBOARD)
     return GET_NAME
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -100,7 +103,7 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 async def get_birthdate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
         context.user_data['birth_date'] = datetime.strptime(update.message.text, "%d.%m.%Y").date()
-        await update.message.reply_text("Выберите группу.", reply_markup=ReplyKeyboardMarkup([CONTACT_GROUPS], one_time_keyboard=True))
+        await update.message.reply_text("Выберите группу.", reply_markup=ReplyKeyboardMarkup([CONTACT_GROUPS, [CANCEL_BTN]], one_time_keyboard=True))
         return GET_GROUP
     except ValueError:
         await update.message.reply_text("Неверный формат. Введите дату как ДД.ММ.ГГГГ.")
@@ -123,7 +126,7 @@ async def delete_contact_start(update: Update, context: ContextTypes.DEFAULT_TYP
     if not contacts:
         await update.message.reply_text("У вас нет контактов для удаления.", reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True))
         return ConversationHandler.END
-    keyboard = [[contact_label(c)] for c in contacts]
+    keyboard = [[contact_label(c)] for c in contacts] + [[CANCEL_BTN]]
     await update.message.reply_text("Выберите контакт для удаления.", reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
     return SELECT_CONTACT_TO_DELETE
 
@@ -147,7 +150,7 @@ async def edit_contact_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not contacts:
         await update.message.reply_text("У вас нет контактов для редактирования.", reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True))
         return ConversationHandler.END
-    keyboard = [[contact_label(c)] for c in contacts]
+    keyboard = [[contact_label(c)] for c in contacts] + [[CANCEL_BTN]]
     await update.message.reply_text("Выберите контакт для редактирования.", reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
     return SELECT_CONTACT_TO_EDIT
 
@@ -160,18 +163,18 @@ async def edit_select_contact(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("Контакт не найден.", reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True))
         return ConversationHandler.END
     context.user_data['contact_id_to_edit'] = contact.id
-    await update.message.reply_text("Что именно вы хотите изменить?", reply_markup=ReplyKeyboardMarkup([EDIT_CHOICES], one_time_keyboard=True))
+    await update.message.reply_text("Что именно вы хотите изменить?", reply_markup=ReplyKeyboardMarkup([EDIT_CHOICES, [CANCEL_BTN]], one_time_keyboard=True))
     return SELECT_FIELD_TO_EDIT
 
 async def edit_select_field(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     choice = update.message.text
     context.user_data['edit_choice'] = choice
     if choice == "Имя":
-        await update.message.reply_text("Введите новое имя.", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("Введите новое имя.", reply_markup=CANCEL_KEYBOARD)
     elif choice == "Дату":
-        await update.message.reply_text("Введите новую дату в формате ДД.ММ.ГГГГ.", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("Введите новую дату в формате ДД.ММ.ГГГГ.", reply_markup=CANCEL_KEYBOARD)
     elif choice == "Группу":
-        await update.message.reply_text("Выберите новую группу.", reply_markup=ReplyKeyboardMarkup([CONTACT_GROUPS], one_time_keyboard=True))
+        await update.message.reply_text("Выберите новую группу.", reply_markup=ReplyKeyboardMarkup([CONTACT_GROUPS, [CANCEL_BTN]], one_time_keyboard=True))
     else:
         await update.message.reply_text("Неверный выбор.", reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True))
         return ConversationHandler.END
@@ -209,16 +212,16 @@ async def settings_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         user = db.query(User).filter(User.telegram_id == update.effective_user.id).one()
     await update.message.reply_text(
         f"Текущие настройки:\n- Время: {user.notification_time.strftime('%H:%M')}\n- Пояс: {user.timezone}",
-        reply_markup=ReplyKeyboardMarkup([["Изменить время"], ["Изменить часовой пояс"]], one_time_keyboard=True)
+        reply_markup=ReplyKeyboardMarkup([["Изменить время"], ["Изменить часовой пояс"], [CANCEL_BTN]], one_time_keyboard=True)
     )
     return SELECT_SETTING
 
 async def settings_select_action(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if "время" in update.message.text.lower():
-        await update.message.reply_text("Введите новый час (0-23).", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("Введите новый час (0-23).", reply_markup=CANCEL_KEYBOARD)
         return GET_NEW_TIME
     elif "пояс" in update.message.text.lower():
-        await update.message.reply_text("Введите часовой пояс (например, Europe/Moscow).", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("Введите часовой пояс (например, Europe/Moscow).", reply_markup=CANCEL_KEYBOARD)
         return GET_NEW_TIMEZONE
     return SELECT_SETTING
 
@@ -276,40 +279,40 @@ def register_handlers(application: Application):
     add_conv = ConversationHandler(
         entry_points=[CommandHandler("add", add_contact_start), MessageHandler(filters.Regex(f"^{ADD_BTN}$"), add_contact_start)],
         states={
-            GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
-            GET_BIRTHDATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_birthdate)],
-            GET_GROUP: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_group)],
+            GET_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, get_name)],
+            GET_BIRTHDATE: [MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, get_birthdate)],
+            GET_GROUP: [MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, get_group)],
         }, 
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler("cancel", cancel), MessageHandler(CANCEL_FILTER, cancel)],
         allow_reentry=True
     )
     
     delete_conv = ConversationHandler(
         entry_points=[CommandHandler("delete", delete_contact_start), MessageHandler(filters.Regex(f"^{DELETE_BTN}$"), delete_contact_start)],
-        states={SELECT_CONTACT_TO_DELETE: [MessageHandler(filters.TEXT & ~filters.COMMAND, delete_contact_selected)]},
-        fallbacks=[CommandHandler("cancel", cancel)],
+        states={SELECT_CONTACT_TO_DELETE: [MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, delete_contact_selected)]},
+        fallbacks=[CommandHandler("cancel", cancel), MessageHandler(CANCEL_FILTER, cancel)],
         allow_reentry=True
     )
 
     edit_conv = ConversationHandler(
         entry_points=[CommandHandler("edit", edit_contact_start), MessageHandler(filters.Regex(f"^{EDIT_BTN}$"), edit_contact_start)],
         states={
-            SELECT_CONTACT_TO_EDIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_select_contact)],
-            SELECT_FIELD_TO_EDIT: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_select_field)],
-            GET_EDITED_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_edited_value)],
+            SELECT_CONTACT_TO_EDIT: [MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, edit_select_contact)],
+            SELECT_FIELD_TO_EDIT: [MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, edit_select_field)],
+            GET_EDITED_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, get_edited_value)],
         }, 
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler("cancel", cancel), MessageHandler(CANCEL_FILTER, cancel)],
         allow_reentry=True
     )
 
     settings_conv = ConversationHandler(
         entry_points=[CommandHandler("settings", settings_start), MessageHandler(filters.Regex(f"^{SETTINGS_BTN}$"), settings_start)],
         states={
-            SELECT_SETTING: [MessageHandler(filters.TEXT & ~filters.COMMAND, settings_select_action)],
-            GET_NEW_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_notification_time)],
-            GET_NEW_TIMEZONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, set_timezone)],
+            SELECT_SETTING: [MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, settings_select_action)],
+            GET_NEW_TIME: [MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, set_notification_time)],
+            GET_NEW_TIMEZONE: [MessageHandler(filters.TEXT & ~filters.COMMAND & ~CANCEL_FILTER, set_timezone)],
         }, 
-        fallbacks=[CommandHandler("cancel", cancel)],
+        fallbacks=[CommandHandler("cancel", cancel), MessageHandler(CANCEL_FILTER, cancel)],
         allow_reentry=True
     )
 
