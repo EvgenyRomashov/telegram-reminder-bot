@@ -9,6 +9,7 @@ from reminder_bot.handlers import (
     CANCEL_BTN,
     CANCEL_KEYBOARD,
     get_group,
+    show_main_menu,
     register_handlers,
 )
 
@@ -59,3 +60,15 @@ async def test_get_group_saves_contact_and_restores_main_menu(monkeypatch):
     assert result == ConversationHandler.END
     reply_markup = message.reply_text.await_args.kwargs["reply_markup"]
     assert reply_markup.keyboard[0][0].text == "➕ Добавить"
+
+
+@pytest.mark.asyncio
+async def test_show_main_menu_replaces_stale_keyboard():
+    message = SimpleNamespace(reply_text=AsyncMock())
+    update = SimpleNamespace(message=message)
+
+    await show_main_menu(update, SimpleNamespace())
+
+    reply_markup = message.reply_text.await_args.kwargs["reply_markup"]
+    assert reply_markup.keyboard[0][0].text == "➕ Добавить"
+    assert "восстановлено" in message.reply_text.await_args.args[0]

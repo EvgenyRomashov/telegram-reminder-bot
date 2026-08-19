@@ -258,6 +258,13 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
     return ConversationHandler.END
 
+async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Restore the main keyboard after an interrupted or restarted conversation."""
+    await update.message.reply_text(
+        "Главное меню восстановлено.",
+        reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True),
+    )
+
 async def test_notification(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     ensure_user(update.effective_user)
     message_text = generate_reminders_text(update.effective_user.id)
@@ -318,6 +325,7 @@ def register_handlers(application: Application):
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("test", test_notification))
+    application.add_handler(CommandHandler("menu", show_main_menu))
     
     # Simple commands can also be triggered by buttons
     application.add_handler(MessageHandler(filters.Regex(f"^{LIST_BTN}$"), list_contacts))
@@ -330,3 +338,6 @@ def register_handlers(application: Application):
     application.add_handler(delete_conv)
     application.add_handler(edit_conv)
     application.add_handler(settings_conv)
+
+    # Must be last: active conversations get the text first; stale keyboards recover here.
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, show_main_menu))
