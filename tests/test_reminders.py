@@ -87,3 +87,22 @@ def test_generate_reminders_text_no_contacts(db_session, mocker):
     result_text = generate_reminders_text(user_id=456)
 
     assert result_text == "У вас пока нет добавленных контактов. Используйте /add, чтобы добавить первый."
+
+def test_next_birthday_for_leap_day():
+    from reminder_bot.reminders import next_birthday_for
+    assert next_birthday_for(date(2000, 2, 29), date(2026, 1, 1)) == date(2026, 2, 28)
+    assert next_birthday_for(date(2000, 2, 29), date(2026, 3, 1)) == date(2027, 2, 28)
+
+def test_generate_reminders_text_escapes_html(db_session, mocker):
+    mocker.patch("reminder_bot.reminders.get_db", return_value=db_session)
+    db_session.add(User(telegram_id=789, first_name="Тест"))
+    db_session.add(Contact(user_id=789, full_name="Иван <Петров> & Co", birth_date=date(2000, 1, 1)))
+    db_session.commit()
+    result = generate_reminders_text(789)
+    assert "Иван &lt;Петров&gt; &amp; Co" in result
+
+def test_split_telegram_message_respects_limit():
+    from reminder_bot.reminders import split_telegram_message
+    chunks = split_telegram_message("строка\\n" * 1000, limit=100)
+    assert len(chunks) > 1
+    assert all(len(chunk) <= 100 for chunk in chunks)

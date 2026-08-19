@@ -1,7 +1,8 @@
 """
 Core logic for generating reminder messages.
 """
-from datetime import date, datetime
+from datetime import date
+from html import escape
 from .database import get_db, Contact
 
 def get_russian_month(month_number: int) -> str:
@@ -21,6 +22,35 @@ def format_plural(value: int, forms: tuple[str, str, str]) -> str:
     else:
         return forms[2]
 
+TELEGRAM_MESSAGE_LIMIT = 4096
+
+def split_telegram_message(text: str, limit: int = TELEGRAM_MESSAGE_LIMIT) -> list[str]:
+    """Split text on line boundaries into messages accepted by Telegram."""
+    chunks: list[str] = []
+    current = ""
+    for line in text.splitlines(keepends=True):
+        if len(line) > limit:
+            if current:
+                chunks.append(current.rstrip("\n"))
+                current = ""
+            chunks.extend(line[i:i + limit] for i in range(0, len(line), limit))
+        elif len(current) + len(line) > limit:
+            chunks.append(current.rstrip("\n"))
+            current = line
+        else:
+            current += line
+    if current:
+        chunks.append(current.rstrip("\n"))
+    return chunks or [""]
+
+def next_birthday_for(birth_date: date, today: date) -> date:
+    """Return the next birthday; 29 February is observed on 28 February."""
+    day = 28 if birth_date.month == 2 and birth_date.day == 29 else birth_date.day
+    candidate = date(today.year, birth_date.month, day)
+    if candidate < today:
+        candidate = date(today.year + 1, birth_date.month, day)
+    return candidate
+
 def generate_reminders_text(user_id: int) -> str:
     """
     Generates the text for a user's birthday reminders.
@@ -36,9 +66,7 @@ def generate_reminders_text(user_id: int) -> str:
 
     for contact in contacts:
         # Calculate next birthday
-        next_birthday = contact.birth_date.replace(year=today.year)
-        if next_birthday < today:
-            next_birthday = next_birthday.replace(year=today.year + 1)
+        next_birthday = next_birthday_for(contact.birth_date, today)
         
         # Calculate days until next birthday
         days_until = (next_birthday - today).days
@@ -60,7 +88,7 @@ def generate_reminders_text(user_id: int) -> str:
 
         reminders.append({
             "days_until": days_until,
-            "text": f"| {contact.full_name} | день рождения {days_str} | {age} {format_plural(age, ('год', 'года', 'лет'))} | {birth_date_str} |"
+            "text": f"| {escape(contact.full_name)} | день рождения {days_str} | {age} {format_plural(age, ('год', 'года', 'лет'))} | {birth_date_str} |"
         })
 
     # Sort reminders by days until birthday

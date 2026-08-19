@@ -3,11 +3,11 @@ Scheduler for sending daily birthday reminders.
 """
 import logging
 import pytz
-from datetime import datetime
+from datetime import datetime, timezone
 from telegram.ext import Application
 
 from .database import get_db, User
-from .reminders import generate_reminders_text
+from .reminders import generate_reminders_text, split_telegram_message
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +17,7 @@ async def send_daily_reminders(bot: Application.bot):
     It checks for users who need a reminder at the current hour.
     """
     logger.info("Scheduler job started: Checking for users to notify.")
-    now_utc = datetime.utcnow()
+    now_utc = datetime.now(timezone.utc)
     
     with get_db() as db:
         users = db.query(User).filter(User.notifications_enabled == True).all()
@@ -38,11 +38,10 @@ async def send_daily_reminders(bot: Application.bot):
                 
                 # Avoid sending empty/default messages
                 if "У вас пока нет" not in message_text:
-                    await bot.send_message(
-                        chat_id=user.telegram_id,
-                        text=message_text,
-                        parse_mode='HTML'
-                    )
+                    for chunk in split_telegram_message(message_text):
+                        await bot.send_message(
+                            chat_id=user.telegram_id, text=chunk, parse_mode="HTML"
+                        )
                     logger.info(f"Notification sent to user {user.telegram_id}.")
         except Exception as e:
             logger.error(f"Error processing user {user.telegram_id}: {e}", exc_info=True)

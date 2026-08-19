@@ -1,15 +1,18 @@
-# Use an official Python runtime as a parent image
-FROM python:3.9-slim-buster
+FROM python:3.12-slim-bookworm
 
-# Set the working directory in the container
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
 WORKDIR /app
 
-# Install any needed packages specified in pyproject.toml
-COPY pyproject.toml .
+RUN groupadd --gid 10001 app && useradd --uid 10001 --gid app --no-create-home app
+
+COPY pyproject.toml README.md ./
+COPY reminder_bot ./reminder_bot
 RUN pip install --no-cache-dir .
 
-# Copy the rest of the application code
-COPY . .
+RUN mkdir -p /app/data && chown -R app:app /app
+USER app
 
-# Run main.py as a module when the container launches
 CMD ["python", "-m", "reminder_bot.main"]

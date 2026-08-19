@@ -11,13 +11,26 @@ from reminder_bot.scheduler import send_daily_reminders
 from reminder_bot.handlers import register_handlers
 from reminder_bot.database import engine, Base
 
+async def post_shutdown(application: Application) -> None:
+    scheduler = application.bot_data.get("scheduler")
+    if scheduler and scheduler.running:
+        scheduler.shutdown(wait=False)
+
+async def error_handler(update: object, context) -> None:
+    logging.getLogger(__name__).error("Unhandled update error", exc_info=context.error)
+
 async def post_init(application: Application) -> None:
     """
     Post-initialization function to set up the scheduler.
     This is called by the Application object after initialization but before polling starts.
     """
     scheduler = AsyncIOScheduler(timezone="UTC")
-    scheduler.add_job(send_daily_reminders, "cron", hour="*", args=[application.bot])
+    scheduler.add_job(
+        send_daily_reminders, "cron", hour="*", minute=0, args=[application.bot],
+        id="daily-reminders", replace_existing=True, coalesce=True, max_instances=1,
+        misfire_grace_time=1800,
+    )
+    application.bot_data["scheduler"] = scheduler
     scheduler.start()
 
 def main() -> None:
@@ -41,15 +54,16 @@ def main() -> None:
     Base.metadata.create_all(bind=engine)
 
     # Create the Application and pass it your bot's token, with post_init hook.
-    application = Application.builder().token(token).post_init(post_init).build()
+    application = Application.builder().token(token).post_init(post_init).post_shutdown(post_shutdown).build()
 
     # Register all handlers
     register_handlers(application)
+    application.add_error_handler(error_handler)
 
     logger.info("Bot started and listening for messages...")
 
     # Run the bot until the user presses Ctrl-C
-    application.run_polling()
+    application.run_polling(drop_pending_updates=False)
 
 if __name__ == "__main__":
     main()

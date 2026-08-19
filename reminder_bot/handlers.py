@@ -8,7 +8,7 @@ from datetime import datetime, time
 import pytz
 
 from reminder_bot.database import get_db, User, Contact
-from reminder_bot.reminders import generate_reminders_text
+from reminder_bot.reminders import generate_reminders_text, split_telegram_message
 
 # Conversation states
 (
@@ -33,6 +33,25 @@ MAIN_KEYBOARD = [
 
 CONTACT_GROUPS = ["Семья", "Друзья", "Коллеги", "Знакомые", "Важное"]
 EDIT_CHOICES = ["Имя", "Дату", "Группу"]
+
+def contact_label(contact: Contact) -> str:
+    return f"{contact.full_name} · #{contact.id}"
+
+def contact_id_from_label(label: str) -> int | None:
+    try:
+        return int(label.rsplit("#", 1)[1])
+    except (IndexError, ValueError):
+        return None
+
+def ensure_user(telegram_user) -> None:
+    with get_db() as db:
+        user = db.query(User).filter(User.telegram_id == telegram_user.id).first()
+        if user is None:
+            db.add(User(telegram_id=telegram_user.id, first_name=telegram_user.first_name, username=telegram_user.username))
+        else:
+            user.first_name = telegram_user.first_name
+            user.username = telegram_user.username
+        db.commit()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -69,11 +88,12 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 # --- Add Contact Conversation ---
 async def add_contact_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    ensure_user(update.effective_user)
     await update.message.reply_text("Введите фамилию и имя. Для отмены введите /cancel.", reply_markup=ReplyKeyboardRemove())
     return GET_NAME
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['full_name'] = update.message.text
+    context.user_data['full_name'] = update.message.text.strip()[:200]
     await update.message.reply_text(f"Отлично! Теперь введите дату рождения для '{context.user_data['full_name']}' в формате ДД.ММ.ГГГГ.")
     return GET_BIRTHDATE
 
@@ -87,7 +107,7 @@ async def get_birthdate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return GET_BIRTHDATE
 
 async def get_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data['group'] = update.message.text
+    context.user_data['group'] = update.message.text if update.message.text in CONTACT_GROUPS else "Друзья"
     with get_db() as db:
         db.add(Contact(**context.user_data, user_id=update.effective_user.id))
         db.commit()
@@ -97,18 +117,19 @@ async def get_group(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 # --- Delete Contact Conversation ---
 async def delete_contact_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    ensure_user(update.effective_user)
     with get_db() as db:
         contacts = db.query(Contact).filter(Contact.user_id == update.effective_user.id).all()
     if not contacts:
         await update.message.reply_text("У вас нет контактов для удаления.", reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True))
         return ConversationHandler.END
-    keyboard = [[c.full_name] for c in contacts]
+    keyboard = [[contact_label(c)] for c in contacts]
     await update.message.reply_text("Выберите контакт для удаления.", reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
     return SELECT_CONTACT_TO_DELETE
 
 async def delete_contact_selected(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     with get_db() as db:
-        contact = db.query(Contact).filter(Contact.user_id == update.effective_user.id, Contact.full_name == update.message.text).first()
+        contact = db.query(Contact).filter(Contact.user_id == update.effective_user.id, Contact.id == contact_id_from_label(update.message.text)).first()
         if contact:
             db.delete(contact)
             db.commit()
@@ -119,21 +140,22 @@ async def delete_contact_selected(update: Update, context: ContextTypes.DEFAULT_
 
 # --- Edit Contact Conversation ---
 async def edit_contact_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    ensure_user(update.effective_user)
     # ... (Implementation similar to delete_contact_start)
     with get_db() as db:
         contacts = db.query(Contact).filter(Contact.user_id == update.effective_user.id).all()
     if not contacts:
         await update.message.reply_text("У вас нет контактов для редактирования.", reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True))
         return ConversationHandler.END
-    keyboard = [[c.full_name] for c in contacts]
+    keyboard = [[contact_label(c)] for c in contacts]
     await update.message.reply_text("Выберите контакт для редактирования.", reply_markup=ReplyKeyboardMarkup(keyboard, one_time_keyboard=True))
     return SELECT_CONTACT_TO_EDIT
 
 async def edit_select_contact(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     # ... (Implementation similar to delete_contact_selected)
-    contact_name = update.message.text
+    contact_id = contact_id_from_label(update.message.text)
     with get_db() as db:
-        contact = db.query(Contact).filter(Contact.user_id == update.effective_user.id, Contact.full_name == contact_name).first()
+        contact = db.query(Contact).filter(Contact.user_id == update.effective_user.id, Contact.id == contact_id).first()
     if not contact:
         await update.message.reply_text("Контакт не найден.", reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True))
         return ConversationHandler.END
@@ -159,7 +181,9 @@ async def get_edited_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     choice = context.user_data.get('edit_choice')
     contact_id = context.user_data.get('contact_id_to_edit')
     with get_db() as db:
-        contact = db.query(Contact).filter(Contact.id == contact_id).one()
+        contact = db.query(Contact).filter(
+            Contact.id == contact_id, Contact.user_id == update.effective_user.id
+        ).one()
         msg = ""
         if choice == "Имя":
             contact.full_name = update.message.text
@@ -171,7 +195,7 @@ async def get_edited_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             except ValueError:
                 msg = "Неверный формат даты. Редактирование отменено."
         elif choice == "Группу":
-            contact.contact_group = update.message.text
+            contact.contact_group = update.message.text if update.message.text in CONTACT_GROUPS else contact.contact_group
             msg = "Группа изменена."
         db.commit()
     await update.message.reply_text(msg, reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True))
@@ -180,6 +204,7 @@ async def get_edited_value(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 # --- Settings Conversation ---
 async def settings_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    ensure_user(update.effective_user)
     with get_db() as db:
         user = db.query(User).filter(User.telegram_id == update.effective_user.id).one()
     await update.message.reply_text(
@@ -231,12 +256,16 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 async def test_notification(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    ensure_user(update.effective_user)
     message_text = generate_reminders_text(update.effective_user.id)
-    await context.bot.send_message(chat_id=update.effective_chat.id, text=message_text, parse_mode='HTML')
+    for chunk in split_telegram_message(message_text):
+        await context.bot.send_message(chat_id=update.effective_chat.id, text=chunk, parse_mode="HTML")
 
 async def list_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    ensure_user(update.effective_user)
     message_text = generate_reminders_text(update.effective_user.id)
-    await update.message.reply_text(message_text, parse_mode='HTML')
+    for chunk in split_telegram_message(message_text):
+        await update.message.reply_text(chunk, parse_mode="HTML")
 
 # --- Handler Registration ---
 def register_handlers(application: Application):
@@ -285,7 +314,6 @@ def register_handlers(application: Application):
     )
 
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("cancel", cancel))
     application.add_handler(CommandHandler("test", test_notification))
     
     # Simple commands can also be triggered by buttons
