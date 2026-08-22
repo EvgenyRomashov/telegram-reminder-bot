@@ -2,7 +2,6 @@
 Main entry point for the Telegram bot.
 """
 import logging
-from telegram import MenuButtonWebApp, WebAppInfo
 from telegram.ext import Application
 from dotenv import load_dotenv
 import os
@@ -25,17 +24,6 @@ async def post_init(application: Application) -> None:
     Post-initialization function to set up the scheduler.
     This is called by the Application object after initialization but before polling starts.
     """
-    web_app_url = os.getenv("WEB_APP_URL", "").strip()
-    if web_app_url.startswith("https://"):
-        try:
-            await application.bot.set_chat_menu_button(
-                menu_button=MenuButtonWebApp(
-                    text="Дни рождения", web_app=WebAppInfo(web_app_url)
-                )
-            )
-        except Exception:
-            logging.getLogger(__name__).exception("Failed to configure Mini App menu button")
-
     scheduler = AsyncIOScheduler(timezone="UTC")
     scheduler.add_job(
         send_daily_reminders, "cron", hour="*", minute=0, args=[application.bot],

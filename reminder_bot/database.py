@@ -1,14 +1,11 @@
 """
 Database models using SQLAlchemy.
 """
-from dotenv import load_dotenv
 from sqlalchemy import create_engine, Column, Integer, String, Date, Time, Boolean, ForeignKey, BigInteger, event
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
 import os
 from contextlib import contextmanager
 from datetime import time
-
-load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///reminders.db")
 

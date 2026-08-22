@@ -1,15 +1,14 @@
 """
 Bot command and message handlers with a keyboard UI.
 """
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, ContextTypes
+from sqlalchemy.exc import IntegrityError
 from datetime import datetime, time
-import os
 import pytz
 
 from reminder_bot.database import get_db, User, Contact
 from reminder_bot.reminders import generate_reminders_text, split_telegram_message
-from reminder_bot.web.launch import personalized_launch_url
 
 # Conversation states
 (
@@ -28,12 +27,9 @@ SETTINGS_BTN = "⚙️ Настройки"
 HELP_BTN = "❓ Помощь"
 CANCEL_BTN = "↩️ Отмена"
 
-WEB_APP_URL = os.getenv("WEB_APP_URL", "").strip()
-WEB_APP_BTN = "🌐 Открыть приложение"
-
 MAIN_KEYBOARD = [
     [ADD_BTN, EDIT_BTN, DELETE_BTN],
-    [LIST_BTN, SETTINGS_BTN, HELP_BTN],
+    [LIST_BTN, SETTINGS_BTN, HELP_BTN]
 ]
 
 CONTACT_GROUPS = ["Семья", "Друзья", "Коллеги", "Знакомые", "Важное"]
@@ -79,9 +75,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 f"С возвращением, {telegram_user.first_name}! Чем могу помочь?",
                 reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
             )
-
-    if WEB_APP_URL.startswith("https://"):
-        await open_web_app(update, context)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends a help message."""
@@ -265,20 +258,6 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
     return ConversationHandler.END
 
-def web_app_markup(user_id: int) -> InlineKeyboardMarkup:
-    launch_url = personalized_launch_url(WEB_APP_URL, user_id, os.environ["BOT_TOKEN"])
-    button = InlineKeyboardButton(WEB_APP_BTN, web_app=WebAppInfo(launch_url))
-    return InlineKeyboardMarkup([[button]])
-
-async def open_web_app(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not WEB_APP_URL.startswith("https://"):
-        await update.message.reply_text("Web-приложение пока не настроено.")
-        return
-    await update.message.reply_text(
-        "Откройте приложение для управления контактами.",
-        reply_markup=web_app_markup(update.effective_user.id),
-    )
-
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Restore the main keyboard after an interrupted or restarted conversation."""
     await update.message.reply_text(
@@ -347,7 +326,6 @@ def register_handlers(application: Application):
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("test", test_notification))
     application.add_handler(CommandHandler("menu", show_main_menu))
-    application.add_handler(CommandHandler("app", open_web_app))
     
     # Simple commands can also be triggered by buttons
     application.add_handler(MessageHandler(filters.Regex(f"^{LIST_BTN}$"), list_contacts))

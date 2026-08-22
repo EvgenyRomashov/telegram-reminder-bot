@@ -13,9 +13,6 @@ dependencies = [
     "APScheduler>=3.10,<4",
     "python-dotenv>=1,<2",
     "pytz>=2024.1",
-    "fastapi>=0.115,<1",
-    "uvicorn[standard]>=0.30,<1",
-    "cryptography>=43,<47",
 ]
 
 [project.optional-dependencies]
@@ -25,6 +22,3 @@ dev = [
     "pytest-mock",
     "freezegun",
 ]
-
-[tool.setuptools.package-data]
-reminder_bot = ["web/static/*"]
