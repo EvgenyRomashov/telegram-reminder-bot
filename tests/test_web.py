@@ -3,7 +3,7 @@ import hmac
 import json
 from contextlib import contextmanager
 from datetime import date, timedelta
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode
 
 import pytest
 from sqlalchemy import create_engine
@@ -135,3 +135,14 @@ async def test_contacts_api_uses_authenticated_user(monkeypatch):
     assert response.status_code == 200
     assert response.json()[0]["id"] == 7
     assert response.json()[0]["full_name"] == "Анна"
+
+
+def test_validate_init_data_accepts_hash_including_ed25519_signature():
+    token = "123:token"
+    values = dict(parse_qsl(signed_init_data(token, 42, 1_700_000_000)))
+    values.pop("hash")
+    check_string = "\\n".join(f"{key}={value}" for key, value in sorted(values.items()))
+    secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
+    values["hash"] = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
+    user = validate_init_data(urlencode(values), token, now=1_700_000_100)
+    assert user.id == 42
