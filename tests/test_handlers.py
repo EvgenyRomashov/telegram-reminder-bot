@@ -78,8 +78,9 @@ async def test_show_main_menu_replaces_stale_keyboard():
 @pytest.mark.asyncio
 async def test_open_web_app_uses_authorized_inline_button(monkeypatch):
     monkeypatch.setattr("reminder_bot.handlers.WEB_APP_URL", "https://reminder.example")
+    monkeypatch.setenv("BOT_TOKEN", "123:test-token")
     message = SimpleNamespace(reply_text=AsyncMock())
-    await open_web_app(SimpleNamespace(message=message), SimpleNamespace())
+    await open_web_app(SimpleNamespace(message=message, effective_user=SimpleNamespace(id=42)), SimpleNamespace())
     markup = message.reply_text.await_args.kwargs["reply_markup"]
     button = markup.inline_keyboard[0][0]
-    assert button.web_app.url == "https://reminder.example"
+    assert button.web_app.url.startswith("https://reminder.example#launch_token=")

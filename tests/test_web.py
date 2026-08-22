@@ -14,6 +14,7 @@ from sqlalchemy.orm import sessionmaker
 from reminder_bot.database import Base, Contact, User
 from reminder_bot.services import contacts as contact_service
 import reminder_bot.web.auth as auth_module
+from reminder_bot.web.launch import create_launch_token, validate_launch_token
 from reminder_bot.web.app import ContactPayload
 from reminder_bot.web.auth import validate_init_data
 
@@ -169,3 +170,31 @@ def test_validate_init_data_accepts_official_ed25519_signature(monkeypatch):
     )
     user = validate_init_data(urlencode(values), token, now=1_700_000_100)
     assert user.id == 42
+
+
+def test_launch_token_is_signed_and_expires():
+    token = create_launch_token(42, "123:token", now=1_700_000_000)
+    assert validate_launch_token(token, "123:token", now=1_700_000_100) == 42
+    with pytest.raises(ValueError):
+        validate_launch_token(token, "wrong-token", now=1_700_000_100)
+    with pytest.raises(ValueError, match="expired"):
+        validate_launch_token(token, "123:token", now=1_700_004_000)
+
+
+@pytest.mark.asyncio
+async def test_contacts_api_accepts_personalized_launch_token(monkeypatch):
+    from httpx import ASGITransport, AsyncClient
+    import reminder_bot.web.app as web_module
+
+    monkeypatch.setenv("BOT_TOKEN", "123:token")
+    monkeypatch.setattr(web_module, "ensure_user", lambda *args: None)
+    monkeypatch.setattr(web_module, "list_contacts", lambda user_id: [])
+    launch_token = create_launch_token(42, "123:token")
+    async with AsyncClient(
+        transport=ASGITransport(app=web_module.app), base_url="http://test"
+    ) as client:
+        response = await client.get(
+            "/api/contacts", headers={"X-App-Launch-Token": launch_token}
+        )
+    assert response.status_code == 200
+    assert response.json() == []

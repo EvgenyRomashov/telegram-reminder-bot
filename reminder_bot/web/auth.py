@@ -13,6 +13,7 @@ from urllib.parse import parse_qsl
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 from fastapi import Header, HTTPException, status
+from reminder_bot.web.launch import validate_launch_token
 
 TELEGRAM_ED25519_PUBLIC_KEY = bytes.fromhex(
     "e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242d"
@@ -103,13 +104,20 @@ def validate_init_data(init_data: str, bot_token: str, now: int | None = None) -
 
 def authenticated_user(
     x_telegram_init_data: str | None = Header(default=None, alias="X-Telegram-Init-Data"),
+    x_app_launch_token: str | None = Header(default=None, alias="X-App-Launch-Token"),
 ) -> TelegramUser:
-    if not x_telegram_init_data:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Telegram authorization is required")
     token = os.getenv("BOT_TOKEN")
     if not token:
         raise HTTPException(status.HTTP_503_SERVICE_UNAVAILABLE, "BOT_TOKEN is not configured")
-    try:
-        return validate_init_data(x_telegram_init_data, token)
-    except ValueError as exc:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+    if x_telegram_init_data:
+        try:
+            return validate_init_data(x_telegram_init_data, token)
+        except ValueError:
+            pass
+    if x_app_launch_token:
+        try:
+            user_id = validate_launch_token(x_app_launch_token, token)
+            return TelegramUser(id=user_id, first_name="")
+        except ValueError as exc:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
+    raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Telegram authorization is required")

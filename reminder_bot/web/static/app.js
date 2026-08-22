@@ -1,5 +1,7 @@
 const tg = window.Telegram?.WebApp;
 const initData = tg?.initData || "";
+const launchToken = new URLSearchParams(location.hash.slice(1)).get("launch_token") || "";
+history.replaceState(null, "", location.pathname + location.search);
 const contactsNode = document.querySelector("#contacts");
 const statusNode = document.querySelector("#status");
 const dialog = document.querySelector("#contact-dialog");
@@ -14,6 +16,7 @@ async function api(path, options = {}) {
     headers: {
       "Content-Type": "application/json",
       "X-Telegram-Init-Data": initData,
+      "X-App-Launch-Token": launchToken,
       ...(options.headers || {}),
     },
   });
@@ -53,7 +56,7 @@ function renderContacts(contacts) {
 }
 
 async function loadContacts() {
-  if (!initData) {
+  if (!initData && !launchToken) {
     statusNode.textContent = "Откройте приложение из Telegram-бота.";
     return;
   }

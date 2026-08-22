@@ -9,6 +9,7 @@ import pytz
 
 from reminder_bot.database import get_db, User, Contact
 from reminder_bot.reminders import generate_reminders_text, split_telegram_message
+from reminder_bot.web.launch import personalized_launch_url
 
 # Conversation states
 (
@@ -264,8 +265,9 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
     return ConversationHandler.END
 
-def web_app_markup() -> InlineKeyboardMarkup:
-    button = InlineKeyboardButton(WEB_APP_BTN, web_app=WebAppInfo(WEB_APP_URL))
+def web_app_markup(user_id: int) -> InlineKeyboardMarkup:
+    launch_url = personalized_launch_url(WEB_APP_URL, user_id, os.environ["BOT_TOKEN"])
+    button = InlineKeyboardButton(WEB_APP_BTN, web_app=WebAppInfo(launch_url))
     return InlineKeyboardMarkup([[button]])
 
 async def open_web_app(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -274,7 +276,7 @@ async def open_web_app(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     await update.message.reply_text(
         "Откройте приложение для управления контактами.",
-        reply_markup=web_app_markup(),
+        reply_markup=web_app_markup(update.effective_user.id),
     )
 
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

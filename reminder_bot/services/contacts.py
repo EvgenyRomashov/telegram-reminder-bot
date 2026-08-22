@@ -16,8 +16,10 @@ def ensure_user(user_id: int, first_name: str, username: str | None = None) -> U
             user = User(telegram_id=user_id, first_name=first_name, username=username)
             db.add(user)
         else:
-            user.first_name = first_name
-            user.username = username
+            if first_name:
+                user.first_name = first_name
+            if username is not None:
+                user.username = username
         db.commit()
         db.refresh(user)
         return user
