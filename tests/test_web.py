@@ -28,6 +28,7 @@ def signed_init_data(token: str, user_id: int, auth_date: int) -> str:
     check_string = "\\n".join(f"{key}={value}" for key, value in sorted(values.items()))
     secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
     values["hash"] = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
+    values["signature"] = "telegram-ed25519-signature"
     return urlencode(values)
 
 

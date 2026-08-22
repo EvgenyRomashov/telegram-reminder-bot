@@ -21,6 +21,8 @@ class TelegramUser:
 def validate_init_data(init_data: str, bot_token: str, now: int | None = None) -> TelegramUser:
     values = dict(parse_qsl(init_data, keep_blank_values=True))
     received_hash = values.pop("hash", None)
+    # Ed25519 signature is excluded from the legacy bot-token HMAC payload.
+    values.pop("signature", None)
     if not received_hash:
         raise ValueError("Telegram hash is missing")
     data_check_string = "\\n".join(
