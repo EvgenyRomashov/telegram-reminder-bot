@@ -1,7 +1,7 @@
 """
 Bot command and message handlers with a keyboard UI.
 """
-from telegram import Update, ReplyKeyboardMarkup, KeyboardButton, WebAppInfo
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ConversationHandler, ContextTypes
 from datetime import datetime, time
 import os
@@ -34,8 +34,6 @@ MAIN_KEYBOARD = [
     [ADD_BTN, EDIT_BTN, DELETE_BTN],
     [LIST_BTN, SETTINGS_BTN, HELP_BTN],
 ]
-if WEB_APP_URL.startswith("https://"):
-    MAIN_KEYBOARD.append([KeyboardButton(WEB_APP_BTN, web_app=WebAppInfo(WEB_APP_URL))])
 
 CONTACT_GROUPS = ["Семья", "Друзья", "Коллеги", "Знакомые", "Важное"]
 EDIT_CHOICES = ["Имя", "Дату", "Группу"]
@@ -80,6 +78,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
                 f"С возвращением, {telegram_user.first_name}! Чем могу помочь?",
                 reply_markup=ReplyKeyboardMarkup(MAIN_KEYBOARD, resize_keyboard=True)
             )
+
+    if WEB_APP_URL.startswith("https://"):
+        await open_web_app(update, context)
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Sends a help message."""
@@ -263,14 +264,17 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data.clear()
     return ConversationHandler.END
 
+def web_app_markup() -> InlineKeyboardMarkup:
+    button = InlineKeyboardButton(WEB_APP_BTN, web_app=WebAppInfo(WEB_APP_URL))
+    return InlineKeyboardMarkup([[button]])
+
 async def open_web_app(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not WEB_APP_URL.startswith("https://"):
         await update.message.reply_text("Web-приложение пока не настроено.")
         return
-    keyboard = [[KeyboardButton(WEB_APP_BTN, web_app=WebAppInfo(WEB_APP_URL))]]
     await update.message.reply_text(
         "Откройте приложение для управления контактами.",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
+        reply_markup=web_app_markup(),
     )
 
 async def show_main_menu(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

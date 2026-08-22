@@ -9,6 +9,7 @@ from reminder_bot.handlers import (
     CANCEL_BTN,
     CANCEL_KEYBOARD,
     get_group,
+    open_web_app,
     show_main_menu,
     register_handlers,
 )
@@ -72,3 +73,13 @@ async def test_show_main_menu_replaces_stale_keyboard():
     reply_markup = message.reply_text.await_args.kwargs["reply_markup"]
     assert reply_markup.keyboard[0][0].text == "➕ Добавить"
     assert "восстановлено" in message.reply_text.await_args.args[0]
+
+
+@pytest.mark.asyncio
+async def test_open_web_app_uses_authorized_inline_button(monkeypatch):
+    monkeypatch.setattr("reminder_bot.handlers.WEB_APP_URL", "https://reminder.example")
+    message = SimpleNamespace(reply_text=AsyncMock())
+    await open_web_app(SimpleNamespace(message=message), SimpleNamespace())
+    markup = message.reply_text.await_args.kwargs["reply_markup"]
+    button = markup.inline_keyboard[0][0]
+    assert button.web_app.url == "https://reminder.example"
