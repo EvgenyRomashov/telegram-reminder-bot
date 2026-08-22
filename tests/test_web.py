@@ -1,3 +1,4 @@
+import base64
 import hashlib
 import hmac
 import json
@@ -6,11 +7,13 @@ from datetime import date, timedelta
 from urllib.parse import parse_qsl, urlencode
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
 from reminder_bot.database import Base, Contact, User
 from reminder_bot.services import contacts as contact_service
+import reminder_bot.web.auth as auth_module
 from reminder_bot.web.app import ContactPayload
 from reminder_bot.web.auth import validate_init_data
 
@@ -144,5 +147,25 @@ def test_validate_init_data_accepts_hash_including_ed25519_signature():
     check_string = "\\n".join(f"{key}={value}" for key, value in sorted(values.items()))
     secret = hmac.new(b"WebAppData", token.encode(), hashlib.sha256).digest()
     values["hash"] = hmac.new(secret, check_string.encode(), hashlib.sha256).hexdigest()
+    user = validate_init_data(urlencode(values), token, now=1_700_000_100)
+    assert user.id == 42
+
+
+def test_validate_init_data_accepts_official_ed25519_signature(monkeypatch):
+    token = "123:rotated-token"
+    values = {
+        "auth_date": "1700000000",
+        "query_id": "query-1",
+        "user": json.dumps({"id": 42, "first_name": "Иван"}, separators=(",", ":"), ensure_ascii=False),
+    }
+    payload = "\\n".join(f"{key}={value}" for key, value in sorted(values.items()))
+    private_key = Ed25519PrivateKey.generate()
+    signature = private_key.sign(f"123:WebAppData\\n{payload}".encode())
+    values["signature"] = base64.urlsafe_b64encode(signature).decode().rstrip("=")
+    values["hash"] = "0" * 64
+    monkeypatch.setattr(
+        auth_module, "TELEGRAM_ED25519_PUBLIC_KEY",
+        private_key.public_key().public_bytes_raw(),
+    )
     user = validate_init_data(urlencode(values), token, now=1_700_000_100)
     assert user.id == 42
